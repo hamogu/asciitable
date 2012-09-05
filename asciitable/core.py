@@ -944,19 +944,23 @@ class ContinuationLinesInputter(BaseInputter):
       2 3
       4 5 \
       6
+    
+    When joining ``continuation_char`` is replaced by ``replace_char``.
     """
 
     continuation_char = '\\'
+    replace_char = ' '
 
     def process_lines(self, lines):
-        striplines = (x.strip() for x in lines)
-        lines = [x for x in striplines if len(x) > 0]
+        #striplines = (x.strip() for x in lines)
+        #lines = [x for x in striplines if len(x) > 0]
 
         parts = []
         outlines = []
         for line in lines:
             if line.endswith(self.continuation_char):
-                parts.append(line.rstrip(self.continuation_char))
+                #parts.append(line.rstrip(self.continuation_char))
+                parts.append(line.replace(self.continuation_char, self.replace_char))
             else:
                 parts.append(line)
                 outlines.append(''.join(parts))

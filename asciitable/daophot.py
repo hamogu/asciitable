@@ -33,6 +33,7 @@ daophot.py:
 import re
 import asciitable.core as core
 import asciitable.basic as basic
+import asciitable.fixedwidth as fixedwidth
 
 class Daophot(core.BaseReader):
     """Read a DAOphot file.
@@ -67,7 +68,8 @@ class Daophot(core.BaseReader):
         core.BaseReader.__init__(self)
         self.header = DaophotHeader()
         self.inputter = core.ContinuationLinesInputter()
-        self.data.splitter.delimiter = ' '
+        self.data.splitter = fixedwidth.FixedWidthSplitter()
+        #self.data.splitter.replace_char = ' '
         self.data.start_line = 0
         self.data.comment = r'\s*#'
     
@@ -107,17 +109,41 @@ class DaophotHeader(core.BaseHeader):
         """
 
         self.names = []
+        col_width = []
         re_name_def = re.compile(r'#N([^#]+)#')
+        re_colformat_def = re.compile(r'#F([^#]+)')
+        col_len_def = re.compile(r'[0-9]+')
         for line in lines:
             if not line.startswith('#'):
                 break                   # End of header lines
             else:
                 match = re_name_def.search(line)
+                formatmatch = re_colformat_def.search(line)
                 if match:
                     self.names.extend(match.group(1).split())
+                if formatmatch:
+                    form = formatmatch.group(1).split()
+                    width = ([int(col_len_def.search(s).group()) for s in form])
+                    # original data format might be shorter than 80 characters
+                    # and filled with spaces
+                    width[-1] = 80 - sum(width[:-1])
+                    col_width.extend(width)
         
         if not self.names:
             raise core.InconsistentTableError('No column names found in DAOphot header')
         
-        self._set_cols_from_names()
+        starts = [int(sum(col_width[0:i])) for i in range(len(col_width))]
+        ends = [col_width[i] + starts[i] for i in range(len(col_width))]
 
+        # Filter self.names using include_names and exclude_names, then create
+        # the actual Column objects.
+        self._set_cols_from_names()
+        self.n_data_cols = len(self.cols)
+        
+        # Set column start and end positions.  Also re-index the cols because
+        # the FixedWidthSplitter does NOT return the ignored cols (as is the
+        # case for typical delimiter-based splitters)
+        for i, col in enumerate(self.cols):
+            col.start = starts[col.index]
+            col.end = ends[col.index]
+            col.index = i
